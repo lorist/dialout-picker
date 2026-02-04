@@ -21,13 +21,13 @@ This branch adds a **searchable dial-out target picker** to make it easier to us
 ## Screenshots
 
 ### Toolbar button (host/chair only)
-![Dial out button](docs/screenshots/toolbar-button.png)
+![Dial out button](screenshots/toolbar-button.png)
 
 ### Searchable dial-out picker widget
-![Searchable dial-out picker](docs/screenshots/search-widget.png)
+![Searchable dial-out picker](screenshots/search-widget.png)
 
 ### Dial started confirmation
-![Dial confirmation](docs/screenshots/dial-confirmation.png)
+![Dial confirmation](screenshots/dial-confirmation.png)
 
 ---
 
