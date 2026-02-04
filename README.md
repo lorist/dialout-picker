@@ -29,7 +29,7 @@ The plugin reads a CSV file from:
 
 ```csv
 label,destination,protocol,role
-Boardroom (SIP),sip:ep3@anzsec.pextest.com,,guest
+Boardroom (SIP),sip:boardroom@example.com,,guest
 Security desk (SIP),sip:security@company.com,,guest
 Legacy codec,h323:10.0.0.50,h323,guest
 Recorder,rtmp://recorder.example.com/live/room1,rtmp,guest
