@@ -1,0 +1,15 @@
+{
+    "name": "webapp3-dialout-picker",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "vite",
+        "build": "vite build"
+    },
+    "dependencies": {
+        "@pexip/plugin-api": "22.1.0"
+    },
+    "devDependencies": {
+        "vite": "^5.0.0"
+    }
+}
