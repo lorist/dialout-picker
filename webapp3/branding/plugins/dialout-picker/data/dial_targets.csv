@@ -1,5 +1,6 @@
 label,destination,protocol,role
-Boardroom (SIP),sip:boardroom@example.com,sip,guest
+Boardroom (SIP),sip:ep3@anzsec.pextest.com,sip,guest
 Security desk (SIP),sip:security@company.com,sip,guest
 Legacy codec,h323:10.0.0.50,h323,guest
 Recorder,rtmp://recorder.example.com/live/room1,rtmp,guest
+Longbay Interview Room1,sip:syd.pod5@pexip.com,sip,guest

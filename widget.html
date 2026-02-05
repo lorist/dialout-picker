@@ -14,7 +14,6 @@
             margin: 0;
             padding: 0;
             overflow: hidden;
-            /* ✅ never sideways */
             background: transparent;
         }
 
@@ -22,7 +21,6 @@
             font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
         }
 
-        /* Panel fills the iframe */
         .panel {
             height: 100%;
             width: 100%;
@@ -31,32 +29,27 @@
             border-radius: 14px;
             box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
             overflow: hidden;
-
             display: flex;
             flex-direction: column;
         }
 
-        /* Scrollable content area */
         .content {
             padding: 14px;
             display: grid;
             gap: 10px;
             box-sizing: border-box;
-
             overflow-y: auto;
-            /* ✅ only this part scrolls */
             overflow-x: hidden;
-
             flex: 1 1 auto;
         }
 
-        /* Sticky footer so Dial is always visible */
         .footer {
             padding: 12px 14px 14px 14px;
             border-top: 1px solid rgba(0, 0, 0, 0.08);
             background: #fff;
-
             flex: 0 0 auto;
+            display: grid;
+            gap: 8px;
         }
 
         .row {
@@ -78,7 +71,6 @@
             border: 1px solid rgba(0, 0, 0, 0.15);
             width: 100%;
             box-sizing: border-box;
-            /* ✅ no overflow */
             min-width: 0;
         }
 
@@ -111,6 +103,137 @@
             opacity: 0.5;
             cursor: not-allowed;
         }
+
+        /* Multi-select list tools */
+        .listTools {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+        }
+
+        .listTools .left {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .miniBtn {
+            width: auto;
+            padding: 7px 10px;
+            border-radius: 10px;
+            background: transparent;
+            border: 1px solid rgba(0, 0, 0, 0.15);
+            color: #333;
+            font-weight: 650;
+            cursor: pointer;
+        }
+
+        .miniBtn:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+
+        .targetList {
+            border: 1px solid rgba(0, 0, 0, 0.15);
+            border-radius: 10px;
+            padding: 8px;
+            max-height: 220px;
+            overflow: auto;
+        }
+
+        .targetItem {
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+            padding: 8px;
+            border-radius: 10px;
+            cursor: pointer;
+        }
+
+        .targetItem:hover {
+            background: rgba(0, 0, 0, 0.03);
+        }
+
+        .targetItem input[type="checkbox"] {
+            width: auto;
+            margin-top: 2px;
+            transform: scale(1.05);
+            cursor: pointer;
+        }
+
+        .tMain {
+            display: grid;
+            gap: 2px;
+        }
+
+        .tLabel {
+            font-weight: 700;
+            font-size: 13px;
+        }
+
+        .tDest {
+            font-size: 12px;
+            opacity: 0.75;
+            word-break: break-all;
+        }
+
+        /* Results log */
+        .results {
+            border: 1px solid rgba(0, 0, 0, 0.12);
+            border-radius: 10px;
+            background: rgba(0, 0, 0, 0.02);
+            padding: 8px;
+            max-height: 120px;
+            overflow: auto;
+            display: grid;
+            gap: 6px;
+        }
+
+        .resLine {
+            display: flex;
+            gap: 8px;
+            align-items: flex-start;
+            font-size: 12px;
+        }
+
+        .badge {
+            flex: 0 0 auto;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-weight: 700;
+            font-size: 11px;
+            border: 1px solid rgba(0, 0, 0, 0.15);
+            background: #fff;
+        }
+
+        .badge.ok {}
+
+        .badge.fail {}
+
+        .badge.skip {}
+
+        .resText {
+            opacity: 0.9;
+        }
+
+        .resSub {
+            opacity: 0.7;
+        }
+
+        .footerRow {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .footerRow .hint {
+            margin: 0;
+        }
     </style>
 </head>
 
@@ -124,8 +247,18 @@
             </div>
 
             <div class="row">
-                <label for="target">Target</label>
-                <select id="target"></select>
+                <div class="listTools">
+                    <div class="left">
+                        <span class="hint" id="selectedHint">0 selected</span>
+                    </div>
+                    <div class="left">
+                        <button class="miniBtn" id="selectAllBtn" type="button">Select all (filtered)</button>
+                        <button class="miniBtn" id="clearBtn" type="button">Clear</button>
+                    </div>
+                </div>
+
+                <div class="targetList" id="targetList"></div>
+                <div class="hint">Tip: search → Select all (filtered) for large lists.</div>
             </div>
 
             <div class="split">
@@ -150,14 +283,23 @@
             </div>
 
             <div class="row">
-                <label for="displayName">Remote display name</label>
-                <input id="displayName" type="text" placeholder="Defaults to the selected label" autocomplete="off" />
+                <label for="displayName">Remote display name (optional override)</label>
+                <input id="displayName" type="text" placeholder="If blank, uses each target label" autocomplete="off" />
+                <div class="hint">If you enter a name here, it will be used for all dial-outs.</div>
+            </div>
+
+            <div class="row">
+                <label>Results</label>
+                <div class="results" id="resultsLog" aria-live="polite"></div>
             </div>
 
             <div class="hint" id="status"></div>
         </div>
 
         <div class="footer">
+            <div class="footerRow">
+                <div class="hint" id="summaryHint">Ready.</div>
+            </div>
             <button id="dialBtn" disabled>Dial</button>
         </div>
     </div>

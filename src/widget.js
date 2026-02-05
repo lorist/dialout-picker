@@ -6,15 +6,15 @@ import { registerWidget } from "@pexip/plugin-api";
  *   webapp3/plugins/dialout-picker/data/dial_targets.csv
  *
  * label,destination,protocol,role
- * Boardroom (SIP),sip:ep3@anzsec.pextest.com,,guest
+ * Boardroom (SIP),sip:boardroom@company.com,,guest
  * Security desk (SIP),sip:security@company.com,,guest
  * Legacy codec,h323:10.0.0.50,h323,guest
  * Recorder,rtmp://recorder.example.com/live/room1,rtmp,guest
  */
-const CSV_PATH = "./data/dial_targets.csv"; // relative to widget.html
+const CSV_PATH = "./data/dial_targets.csv";
 
 const FALLBACK_TARGETS = [
-    { label: "Boardroom (SIP)", destination: "sip:ep3@anzsec.pextest.com", protocol: "auto", role: "GUEST" },
+    { label: "Boardroom (SIP)", destination: "sip:boardroom@company.com", protocol: "auto", role: "GUEST" },
     { label: "Security desk (SIP)", destination: "sip:security@company.com", protocol: "auto", role: "GUEST" },
     { label: "Legacy codec", destination: "h323:10.0.0.50", protocol: "auto", role: "GUEST" },
     { label: "Recorder", destination: "rtmp://recorder.example.com/live/room1", protocol: "auto", role: "GUEST" },
@@ -69,11 +69,13 @@ function parseCsv(text) {
             inQuotes = true;
             continue;
         }
+
         if (ch === ",") {
             row.push(field);
             field = "";
             continue;
         }
+
         if (ch === "\n") {
             row.push(field);
             rows.push(row);
@@ -81,8 +83,8 @@ function parseCsv(text) {
             field = "";
             continue;
         }
-        if (ch === "\r") continue;
 
+        if (ch === "\r") continue;
         field += ch;
     }
 
@@ -151,136 +153,272 @@ function matches(target, q) {
     return hay.includes(needle);
 }
 
-function optionLabel(t) {
-    return `${t.label} — ${t.destination}`;
+function sleep(ms) {
+    return new Promise((r) => setTimeout(r, ms));
+}
+
+function withTimeout(promise, ms, label = "operation") {
+    let timer;
+    const timeout = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+function mkEl(tag, attrs = {}, text = "") {
+    const el = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+        if (k === "className") el.className = v;
+        else if (k === "textContent") el.textContent = v;
+        else el.setAttribute(k, v);
+    }
+    if (text) el.textContent = text;
+    return el;
+}
+
+function badgeKind(ok, skipped) {
+    if (skipped) return { cls: "badge skip", txt: "SKIP" };
+    if (ok) return { cls: "badge ok", txt: "OK" };
+    return { cls: "badge fail", txt: "FAIL" };
 }
 
 (async () => {
     const widget = await registerWidget({ parentPluginId: "dialout-picker" });
 
     const qEl = document.getElementById("q");
-    const targetEl = document.getElementById("target");
+    const listEl = document.getElementById("targetList");
     const joinAsEl = document.getElementById("joinAs");
     const protocolEl = document.getElementById("protocol");
     const displayEl = document.getElementById("displayName");
     const dialBtn = document.getElementById("dialBtn");
-    const hintEl = document.getElementById("countHint");
+    const countHint = document.getElementById("countHint");
+    const selectedHint = document.getElementById("selectedHint");
     const statusEl = document.getElementById("status");
+    const selectAllBtn = document.getElementById("selectAllBtn");
+    const clearBtn = document.getElementById("clearBtn");
+    const resultsLog = document.getElementById("resultsLog");
+    const summaryHint = document.getElementById("summaryHint");
 
-    // Defensive: if any element is missing, show a clear error in the UI
+    // defensive: ensure required elements exist
     const missing = [];
-    if (!qEl) missing.push("#q");
-    if (!targetEl) missing.push("#target");
-    if (!joinAsEl) missing.push("#joinAs");
-    if (!protocolEl) missing.push("#protocol");
-    if (!displayEl) missing.push("#displayName");
-    if (!dialBtn) missing.push("#dialBtn");
-    if (!hintEl) missing.push("#countHint");
-    if (!statusEl) missing.push("#status");
-
+    for (const [name, el] of Object.entries({
+        qEl, listEl, joinAsEl, protocolEl, displayEl, dialBtn,
+        countHint, selectedHint, statusEl, selectAllBtn, clearBtn,
+        resultsLog, summaryHint,
+    })) {
+        if (!el) missing.push(name);
+    }
     if (missing.length) {
-        console.error("dialout-picker widget: missing elements:", missing);
+        console.error("dialout-picker widget missing elements:", missing);
         if (statusEl) statusEl.textContent = `Widget UI error: missing ${missing.join(", ")}`;
         return;
     }
 
     dialBtn.disabled = true;
-    hintEl.textContent = "Loading targets…";
+    countHint.textContent = "Loading targets…";
+    summaryHint.textContent = "Ready.";
 
     const allTargets = await loadTargets();
     const byDest = new Map(allTargets.map((t) => [t.destination, t]));
+
     let filtered = [...allTargets];
+    const selected = new Set(); // destination strings
 
-    function renderOptions() {
-        const current = targetEl.value;
-        targetEl.innerHTML = "";
+    function clearResults() {
+        resultsLog.innerHTML = "";
+    }
 
-        filtered.forEach((t) => {
-            const opt = document.createElement("option");
-            opt.value = t.destination;
-            opt.textContent = optionLabel(t);
-            targetEl.appendChild(opt);
-        });
+    function appendResult({ ok, skipped = false, label, message }) {
+        const line = mkEl("div", { className: "resLine" });
+
+        const b = badgeKind(ok, skipped);
+        line.appendChild(mkEl("div", { className: b.cls }, b.txt));
+
+        const text = mkEl("div", { className: "resText" });
+        text.textContent = label;
+
+        const sub = mkEl("div", { className: "resSub" });
+        sub.textContent = message;
+
+        const stack = mkEl("div");
+        stack.appendChild(text);
+        stack.appendChild(sub);
+
+        line.appendChild(stack);
+        resultsLog.appendChild(line);
+
+        // scroll to bottom
+        resultsLog.scrollTop = resultsLog.scrollHeight;
+    }
+
+    function updateSelectedUI() {
+        selectedHint.textContent = `${selected.size} selected`;
+        dialBtn.textContent = selected.size ? `Dial (${selected.size})` : "Dial";
+        dialBtn.disabled = selected.size === 0;
+    }
+
+    function renderList() {
+        listEl.innerHTML = "";
 
         if (filtered.length === 0) {
-            const opt = document.createElement("option");
-            opt.value = "";
-            opt.textContent = "No matches";
-            targetEl.appendChild(opt);
-            targetEl.value = "";
-            dialBtn.disabled = true;
-            hintEl.textContent = "0 matches";
+            listEl.innerHTML = `<div class="hint">No matches</div>`;
+            countHint.textContent = "0 matches";
+            updateSelectedUI();
             return;
         }
 
-        targetEl.value = filtered.some((t) => t.destination === current) ? current : filtered[0].destination;
-        dialBtn.disabled = false;
-        hintEl.textContent = `${filtered.length} match${filtered.length === 1 ? "" : "es"}`;
+        for (const t of filtered) {
+            const row = document.createElement("label");
+            row.className = "targetItem";
+
+            const cb = document.createElement("input");
+            cb.type = "checkbox";
+            cb.checked = selected.has(t.destination);
+            cb.addEventListener("change", () => {
+                if (cb.checked) selected.add(t.destination);
+                else selected.delete(t.destination);
+                updateSelectedUI();
+            });
+
+            const info = document.createElement("div");
+            info.className = "tMain";
+
+            const l = document.createElement("div");
+            l.className = "tLabel";
+            l.textContent = t.label;
+
+            const d = document.createElement("div");
+            d.className = "tDest";
+            d.textContent = t.destination;
+
+            info.appendChild(l);
+            info.appendChild(d);
+
+            row.appendChild(cb);
+            row.appendChild(info);
+            listEl.appendChild(row);
+        }
+
+        countHint.textContent = `${filtered.length} match${filtered.length === 1 ? "" : "es"}`;
+        updateSelectedUI();
     }
 
     function applyFilter() {
         const q = qEl.value;
         filtered = allTargets.filter((t) => matches(t, q));
-        renderOptions();
+        renderList();
     }
 
-    // Filter on each character
     qEl.addEventListener("input", applyFilter);
 
-    // Re-render when selection changes (optional)
-    targetEl.addEventListener("change", () => {
-        const selected = byDest.get(targetEl.value);
-        if (selected && !(displayEl.value || "").trim()) {
-            // If user hasn't typed a name, set a helpful default
-            displayEl.placeholder = selected.label || "Defaults to the selected label";
-        }
+    selectAllBtn.addEventListener("click", () => {
+        for (const t of filtered) selected.add(t.destination);
+        renderList();
+    });
+
+    clearBtn.addEventListener("click", () => {
+        selected.clear();
+        renderList();
     });
 
     // Initial render
-    renderOptions();
+    renderList();
 
     dialBtn.addEventListener("click", async () => {
         statusEl.textContent = "";
+        clearResults();
 
-        const destination = targetEl.value;
-        const selected = byDest.get(destination);
+        const destinations = [...selected];
+        if (!destinations.length) return;
 
-        if (!destination || !selected) {
-            statusEl.textContent = "Please select a valid target.";
-            return;
-        }
+        // lock UI
+        dialBtn.disabled = true;
+        selectAllBtn.disabled = true;
+        clearBtn.disabled = true;
+        qEl.disabled = true;
+        joinAsEl.disabled = true;
+        protocolEl.disabled = true;
+        displayEl.disabled = true;
 
-        const role = selected.role || joinAsEl.value || "GUEST";
-        const chosenProto = normalizeProtocol(selected.protocol || protocolEl.value || "auto");
-        const destHasScheme = destinationHasScheme(destination);
+        summaryHint.textContent = "Dialing…";
 
-        const displayName =
-            (displayEl.value || "").trim() ||
-            selected.label ||
-            "Dial-out participant";
+        const roleFallback = joinAsEl.value || "GUEST";
+        const chosenProto = normalizeProtocol(protocolEl.value || "auto");
+        const overrideName = (displayEl.value || "").trim();
 
-        const dialArgs = {
-            destination,
-            role,
-            protocol: "auto",
-            remote_display_name: displayName,
-            text: displayName,
-            // Do NOT send source_display_name (per your preference)
-        };
+        const DIAL_TIMEOUT_MS = 12000; // prevents "stuck dialing"
+        const GAP_MS = 350;
 
-        if (!destHasScheme && chosenProto !== "auto") {
-            dialArgs.protocol = chosenProto;
-        }
+        let ok = 0;
+        let fail = 0;
+        let skip = 0;
 
         try {
-            dialBtn.disabled = true;
-            statusEl.textContent = `Dialing ${displayName}…`;
-            await widget.conference.dialOut(dialArgs);
-            statusEl.textContent = `Dial started: ${displayName}`;
-        } catch (err) {
-            statusEl.textContent = `Dial-out failed: ${err?.message || err}`;
+            for (let i = 0; i < destinations.length; i++) {
+                const destination = destinations[i];
+                const t = byDest.get(destination);
+                const label = t?.label || destination;
+
+                if (!t) {
+                    skip++;
+                    appendResult({ ok: false, skipped: true, label, message: "Missing target definition" });
+                    statusEl.textContent = `Skipped ${i + 1}/${destinations.length}: ${label}`;
+                    continue;
+                }
+
+                const role = t.role || roleFallback;
+                const destHasScheme = destinationHasScheme(destination);
+
+                const displayName = overrideName || t.label || "Dial-out participant";
+
+                const dialArgs = {
+                    destination,
+                    role,
+                    protocol: "auto",
+                    remote_display_name: displayName,
+                    text: displayName,
+                };
+
+                const perTargetProto = normalizeProtocol(t.protocol);
+                const protoToUse = perTargetProto !== "auto" ? perTargetProto : chosenProto;
+
+                // Only force protocol for "bare" destinations
+                if (!destHasScheme && protoToUse !== "auto") {
+                    dialArgs.protocol = protoToUse;
+                }
+
+                statusEl.textContent = `Dialing ${i + 1}/${destinations.length}: ${label}`;
+
+                try {
+                    await withTimeout(
+                        widget.conference.dialOut(dialArgs),
+                        DIAL_TIMEOUT_MS,
+                        `Dial-out to ${label}`
+                    );
+
+                    ok++;
+                    appendResult({ ok: true, label, message: "Dial requested" });
+                } catch (e) {
+                    fail++;
+                    appendResult({ ok: false, label, message: e?.message || String(e) });
+                }
+
+                summaryHint.textContent = `Success: ${ok}  Failed: ${fail}  Skipped: ${skip}`;
+                await sleep(GAP_MS);
+            }
+
+            statusEl.textContent = "Done.";
+            summaryHint.textContent = `Done. Success: ${ok}  Failed: ${fail}  Skipped: ${skip}`;
         } finally {
-            dialBtn.disabled = filtered.length === 0;
+            // always restore UI
+            selectAllBtn.disabled = false;
+            clearBtn.disabled = false;
+            qEl.disabled = false;
+            joinAsEl.disabled = false;
+            protocolEl.disabled = false;
+            displayEl.disabled = false;
+
+            updateSelectedUI();
         }
     });
 })();
