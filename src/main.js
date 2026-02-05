@@ -7,16 +7,14 @@ import { registerPlugin } from "@pexip/plugin-api";
         version: 1,
     });
 
-    // Floating widget that contains the searchable "dropdown"
-    // NOTE: widget src is relative to the plugin root (same as index.html)
     const widget = await plugin.ui.addWidget({
         type: "floating",
         src: "./plugins/dialout-picker/widget.html",
-        title: "Dial out",
+        title: "Dial out",        // ✅ keep native widget header (X + drag dots)
         draggable: true,
         isVisible: false,
         position: "topRight",
-        dimensions: { width: "420px", height: "520px" },
+        dimensions: { width: "620px", height: "460px" }, // ✅ gives room for sticky footer
     });
 
     const btn = await plugin.ui.addButton({

@@ -1,3 +1,4 @@
+<!-- widget.html -->
 <!doctype html>
 <html>
 
@@ -5,16 +6,57 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Dial-out Picker</title>
+
     <style>
+        html,
         body {
-            font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+            height: 100%;
             margin: 0;
+            padding: 0;
+            overflow: hidden;
+            /* ✅ never sideways */
+            background: transparent;
         }
 
-        .wrap {
+        body {
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+        }
+
+        /* Panel fills the iframe */
+        .panel {
+            height: 100%;
+            width: 100%;
+            box-sizing: border-box;
+            background: #fff;
+            border-radius: 14px;
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
+            overflow: hidden;
+
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Scrollable content area */
+        .content {
             padding: 14px;
             display: grid;
             gap: 10px;
+            box-sizing: border-box;
+
+            overflow-y: auto;
+            /* ✅ only this part scrolls */
+            overflow-x: hidden;
+
+            flex: 1 1 auto;
+        }
+
+        /* Sticky footer so Dial is always visible */
+        .footer {
+            padding: 12px 14px 14px 14px;
+            border-top: 1px solid rgba(0, 0, 0, 0.08);
+            background: #fff;
+
+            flex: 0 0 auto;
         }
 
         .row {
@@ -34,24 +76,10 @@
             padding: 10px;
             border-radius: 10px;
             border: 1px solid rgba(0, 0, 0, 0.15);
-        }
-
-        button {
-            cursor: pointer;
-            border: none;
-            background: #3d5a76;
-            color: white;
-            font-weight: 600;
-        }
-
-        button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .hint {
-            font-size: 12px;
-            opacity: 0.75;
+            width: 100%;
+            box-sizing: border-box;
+            /* ✅ no overflow */
+            min-width: 0;
         }
 
         .split {
@@ -59,51 +87,79 @@
             grid-template-columns: 1fr 1fr;
             gap: 10px;
         }
+
+        @media (max-width: 560px) {
+            .split {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .hint {
+            font-size: 12px;
+            opacity: 0.75;
+        }
+
+        button {
+            cursor: pointer;
+            border: none;
+            background: #3d5a76;
+            color: #fff;
+            font-weight: 700;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 
 <body>
-    <div class="wrap">
-        <div class="row">
-            <label for="q">Search</label>
-            <input id="q" type="text" placeholder="Type to filter (name or address)..." autocomplete="off" />
-            <div class="hint" id="countHint">Loading targets…</div>
-        </div>
-
-        <div class="row">
-            <label for="target">Target</label>
-            <select id="target"></select>
-        </div>
-
-        <div class="split">
+    <div class="panel">
+        <div class="content">
             <div class="row">
-                <label for="joinAs">Join as</label>
-                <select id="joinAs">
-                    <option value="GUEST" selected>Guest</option>
-                    <option value="HOST">Host</option>
-                </select>
+                <label for="q">Search</label>
+                <input id="q" type="text" placeholder="Type to filter (name or address)..." autocomplete="off" />
+                <div class="hint" id="countHint">Loading targets…</div>
             </div>
 
             <div class="row">
-                <label for="protocol">Protocol</label>
-                <select id="protocol">
-                    <option value="auto" selected>Auto</option>
-                    <option value="h323">H.323</option>
-                    <option value="mssip">MS SIP</option>
-                    <option value="rtmp">RTMP</option>
-                    <!-- SIP often must be inferred from sip: URI in some deployments -->
-                    <option value="sip">SIP</option>
-                </select>
+                <label for="target">Target</label>
+                <select id="target"></select>
             </div>
+
+            <div class="split">
+                <div class="row">
+                    <label for="joinAs">Join as</label>
+                    <select id="joinAs">
+                        <option value="GUEST" selected>Guest</option>
+                        <option value="HOST">Host</option>
+                    </select>
+                </div>
+
+                <div class="row">
+                    <label for="protocol">Protocol</label>
+                    <select id="protocol">
+                        <option value="auto" selected>Auto</option>
+                        <option value="h323">H.323</option>
+                        <option value="mssip">MS SIP</option>
+                        <option value="rtmp">RTMP</option>
+                        <option value="sip">SIP</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="row">
+                <label for="displayName">Remote display name</label>
+                <input id="displayName" type="text" placeholder="Defaults to the selected label" autocomplete="off" />
+            </div>
+
+            <div class="hint" id="status"></div>
         </div>
 
-        <div class="row">
-            <label for="displayName">Remote display name</label>
-            <input id="displayName" type="text" placeholder="Defaults to the selected label" autocomplete="off" />
+        <div class="footer">
+            <button id="dialBtn" disabled>Dial</button>
         </div>
-
-        <button id="dialBtn" disabled>Dial</button>
-        <div class="hint" id="status"></div>
     </div>
 
     <script type="module" src="./src/widget.js"></script>
