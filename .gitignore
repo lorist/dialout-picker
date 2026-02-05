@@ -50,5 +50,6 @@ venv/
 # ----------------------------
 # Optional: local branding output folders
 # ----------------------------
-#webapp3/
-#branding/
+webapp3/
+branding/
+webapp3.zip
